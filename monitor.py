@@ -1,38 +1,61 @@
 import os
 import json
-import re
 import urllib.request
 import urllib.parse
+import urllib.error
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from html.parser import HTMLParser
 
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+SOSOVALUE_API_KEY = os.environ["SOSOVALUE_API_KEY"]
 
 
-def get_text(url):
+# =========================
+# 通用请求
+# =========================
+def get_json(url, extra_headers=None):
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json",
+    }
+
+    if extra_headers:
+        headers.update(extra_headers)
+
     req = urllib.request.Request(
         url,
-        headers={
-            "User-Agent": "Mozilla/5.0",
-            "Accept-Language": "en-US,en;q=0.9"
-        }
+        headers=headers
     )
 
-    with urllib.request.urlopen(req, timeout=30) as response:
-        return response.read().decode("utf-8", errors="ignore")
+    try:
+        with urllib.request.urlopen(
+            req,
+            timeout=30
+        ) as response:
 
+            return json.loads(
+                response.read().decode("utf-8")
+            )
 
-def get_json(url):
-    return json.loads(get_text(url))
+    except urllib.error.HTTPError as e:
+
+        body = e.read().decode(
+            "utf-8",
+            errors="ignore"
+        )
+
+        raise RuntimeError(
+            f"HTTP {e.code}: {body[:300]}"
+        ) from e
 
 
 # =========================
 # BTC 价格
 # =========================
 def get_btc():
+
     urls = [
         "https://data-api.binance.vision/api/v3/ticker/24hr?symbol=BTCUSDT",
         "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT",
@@ -41,11 +64,15 @@ def get_btc():
     last_error = None
 
     for url in urls:
+
         try:
+
             data = get_json(url)
 
             price = float(data["lastPrice"])
-            change = float(data["priceChangePercent"])
+            change = float(
+                data["priceChangePercent"]
+            )
 
             return price, change
 
@@ -67,7 +94,10 @@ def get_fear_greed():
     item = data["data"][0]
 
     value = int(item["value"])
-    classification = item["value_classification"]
+
+    classification = (
+        item["value_classification"]
+    )
 
     cn = {
         "Extreme Fear": "极度恐惧",
@@ -84,135 +114,114 @@ def get_fear_greed():
 
 
 # =========================
-# HTML 表格解析
-# =========================
-class TableParser(HTMLParser):
-
-    def __init__(self):
-        super().__init__()
-
-        self.rows = []
-
-        self.current_row = None
-        self.current_cell = None
-        self.in_cell = False
-
-    def handle_starttag(self, tag, attrs):
-
-        if tag == "tr":
-            self.current_row = []
-
-        elif tag in ("td", "th"):
-
-            self.current_cell = []
-            self.in_cell = True
-
-    def handle_data(self, data):
-
-        if self.in_cell:
-            self.current_cell.append(data)
-
-    def handle_endtag(self, tag):
-
-        if tag in ("td", "th"):
-
-            if self.current_row is not None:
-
-                text = " ".join(
-                    "".join(self.current_cell).split()
-                )
-
-                self.current_row.append(text)
-
-            self.current_cell = None
-            self.in_cell = False
-
-        elif tag == "tr":
-
-            if self.current_row:
-                self.rows.append(self.current_row)
-
-            self.current_row = None
-
-
-# =========================
-# ETF 数字转换
-# =========================
-def parse_flow_number(value):
-
-    value = (
-        value.replace(",", "")
-        .replace("$", "")
-        .strip()
-    )
-
-    if value in ("", "-", "–", "—"):
-        return None
-
-    # Farside 用括号表示负数
-    # 例如 (144.6) = -144.6
-    if value.startswith("(") and value.endswith(")"):
-
-        return -float(value[1:-1])
-
-    return float(value)
-
-
-# =========================
-# BTC ETF 资金流
+# SoSoValue BTC ETF
 # =========================
 def get_btc_etf_flow():
 
-    html = get_text(
-        "https://farside.co.uk/bitcoin-etf-flow-all-data/"
+    params = urllib.parse.urlencode({
+        "symbol": "BTC",
+        "country_code": "US",
+        "limit": 10
+    })
+
+    url = (
+        "https://openapi.sosovalue.com/"
+        "openapi/v1/etfs/summary-history?"
+        + params
     )
 
-    parser = TableParser()
-    parser.feed(html)
+    raw = get_json(
+        url,
+        {
+            "x-soso-api-key":
+                SOSOVALUE_API_KEY
+        }
+    )
 
-    # 从最新日期往前找
-    for row in reversed(parser.rows):
+    # SoSoValue 标准返回格式
+    # {"code":0,"message":"success","data":[...]}
+    if isinstance(raw, dict) and "data" in raw:
 
-        if len(row) < 5:
-            continue
+        code = raw.get("code")
 
-        date_text = row[0]
+        if code not in (None, 0, "0"):
 
-        if not re.fullmatch(
-            r"\d{2} [A-Za-z]{3} \d{4}",
-            date_text
-        ):
-            continue
+            raise RuntimeError(
+                "SoSoValue API错误："
+                + str(raw.get("message"))
+            )
 
-        # 中间是各 ETF
-        fund_values = row[1:-1]
+        data = raw["data"]
 
-        # 如果所有 ETF 都是 -
-        # 说明当天数据还没有更新完成
-        if all(
-            x.strip() in ("", "-", "–", "—")
-            for x in fund_values
-        ):
-            continue
+    else:
+        data = raw
 
-        total = parse_flow_number(row[-1])
+    if not isinstance(data, list) or not data:
 
-        if total is None:
-            continue
-
-        date_obj = datetime.strptime(
-            date_text,
-            "%d %b %Y"
+        raise RuntimeError(
+            "SoSoValue没有返回ETF数据"
         )
+
+    # 官方接口最新日期优先
+    for item in data:
+
+        date_text = item.get("date")
+
+        flow = item.get(
+            "total_net_inflow"
+        )
+
+        if (
+            date_text
+            and flow is not None
+        ):
+
+            flow = float(flow)
+
+            try:
+
+                date_show = datetime.strptime(
+                    date_text,
+                    "%Y-%m-%d"
+                ).strftime("%m-%d")
+
+            except Exception:
+
+                date_show = date_text
+
+            return date_show, flow
+
+    raise RuntimeError(
+        "没有找到有效ETF资金流数据"
+    )
+
+
+# =========================
+# 金额格式
+# =========================
+def format_usd(value):
+
+    value = abs(value)
+
+    if value >= 1_000_000_000:
 
         return (
-            date_obj.strftime("%m-%d"),
-            total
+            f"${value / 1_000_000_000:.2f}B"
         )
 
-    raise ValueError(
-        "没有找到有效 ETF 资金流数据"
-    )
+    if value >= 1_000_000:
+
+        return (
+            f"${value / 1_000_000:.1f}M"
+        )
+
+    if value >= 1_000:
+
+        return (
+            f"${value / 1_000:.1f}K"
+        )
+
+    return f"${value:,.0f}"
 
 
 # =========================
@@ -243,16 +252,6 @@ def send_telegram(message):
         return response.read()
 
 
-def format_etf_amount(value):
-
-    value = abs(value)
-
-    if value >= 1000:
-        return f"${value / 1000:.2f}B"
-
-    return f"${value:.1f}M"
-
-
 # =========================
 # 主程序
 # =========================
@@ -260,7 +259,9 @@ def main():
 
     btc_price, btc_change = get_btc()
 
-    fng_value, fng_text = get_fear_greed()
+    fng_value, fng_text = (
+        get_fear_greed()
+    )
 
     now = datetime.now(
         ZoneInfo("Asia/Shanghai")
@@ -287,15 +288,15 @@ def main():
         if etf_flow > 0:
 
             etf_text = (
-                f"🟢 净流入 "
-                f"{format_etf_amount(etf_flow)}"
+                "🟢 净流入 "
+                + format_usd(etf_flow)
             )
 
         elif etf_flow < 0:
 
             etf_text = (
-                f"🔴 净流出 "
-                f"{format_etf_amount(etf_flow)}"
+                "🔴 净流出 "
+                + format_usd(etf_flow)
             )
 
         else:
@@ -330,7 +331,7 @@ def main():
         f"🕒 {now} 北京时间\n"
 
         "📡 数据源："
-        "Binance / Alternative.me / Farside"
+        "Binance / Alternative.me / SoSoValue"
     )
 
     send_telegram(message)
