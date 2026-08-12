@@ -3,6 +3,10 @@ name: BTC Telegram Monitor
 on:
   workflow_dispatch:
 
+  schedule:
+    - cron: '35 8,20 * * *'
+      timezone: "Asia/Shanghai"
+
 jobs:
   monitor:
     runs-on: ubuntu-latest
