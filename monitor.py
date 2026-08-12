@@ -164,7 +164,7 @@ def parse_flow_number(value):
 def get_btc_etf_flow():
 
     html = get_text(
-        "https://farside.co.uk/btc/"
+        "https://farside.co.uk/bitcoin-etf-flow-all-data/"
     )
 
     parser = TableParser()
