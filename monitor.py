@@ -154,6 +154,26 @@ def get_btc_etf_history(state):
     return rows
 
 
+def get_coinglass_data(state):
+    if not COINGLASS_API_KEY:
+        raise RuntimeError("未配置 COINGLASS_API_KEY")
+
+    url = "https://open-api.coinglass.com/public/v2/open_interest?symbol=BTC&exchange=Binance"
+
+    headers = {
+        "coinglassSecret": COINGLASS_API_KEY
+    }
+
+    raw = get_json(url, headers)
+
+    api_count(state, "CoinGlass")
+
+    return {
+    "symbol": "BTC",
+    "open_interest": raw
+}
+    
+
 def get_stablecoins(state):
     url = "https://stablecoins.llama.fi/stablecoins?includePrices=true"
     data = get_json(url)
@@ -281,6 +301,15 @@ def collect_snapshot(state):
     except Exception as e:
         snapshot["etf_error"] = str(e)
 
+    
+    try:
+        cg = get_coinglass_data(state)
+        snapshot["coinglass"] = cg
+        snapshot["sources"].append("CoinGlass")
+    except Exception as e:
+        snapshot["coinglass_error"] = str(e)
+
+    
     for key, fn in [
         ("stablecoins", get_stablecoins),
         ("tvl", get_chains_tvl),
