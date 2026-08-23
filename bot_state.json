@@ -1,5 +1,5 @@
 {
-  "update_offset": 506247763,
+  "update_offset": 506247764,
   "last_collection": null,
   "last_daily_push": null,
   "api_calls": {
@@ -9,5 +9,5 @@
     "DefiLlama": 12,
     "Coinbase": 4
   },
-  "runs": 7
+  "runs": 8
 }
