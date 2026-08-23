@@ -1,14 +1,14 @@
 {
-  "update_offset": 506247774,
+  "update_offset": 506247775,
   "last_collection": null,
   "last_daily_push": null,
   "api_calls": {
-    "Binance": 8,
-    "Alternative.me": 8,
-    "SoSoValue": 8,
-    "DefiLlama": 24,
-    "Coinbase": 8,
-    "CoinGlass": 8
+    "Binance": 9,
+    "Alternative.me": 9,
+    "SoSoValue": 9,
+    "DefiLlama": 27,
+    "Coinbase": 9,
+    "CoinGlass": 10
   },
-  "runs": 17
+  "runs": 18
 }
