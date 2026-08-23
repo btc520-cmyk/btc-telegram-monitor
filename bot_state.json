@@ -1,5 +1,5 @@
 {
-  "update_offset": 506247770,
+  "update_offset": 506247772,
   "last_collection": null,
   "last_daily_push": null,
   "api_calls": {
@@ -10,5 +10,5 @@
     "Coinbase": 7,
     "CoinGlass": 6
   },
-  "runs": 14
+  "runs": 15
 }
