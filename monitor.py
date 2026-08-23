@@ -612,12 +612,18 @@ def handle_command(cmd, state, history):
         rows = [x for x in history if x.get("date") == target]
         send_telegram(format_today(rows[-1], full=True) if rows else "暂无昨日快照。")
     elif c == "/etf":
-        if not snap:
-            snap = collect_snapshot(state)
-        rows = snap.get("etf") or []
-        lines = ["🏦 BTC现货ETF历史", ""]
-        lines += [f"{x['date']}：{fmt_usd(x['flow'], True)}" for x in rows[:10]]
-        send_telegram("\n".join(lines))
+        try:
+            if not snap:
+                snap = collect_snapshot(state)
+            rows = snap.get("etf") or []
+            if not rows:
+                send_telegram("⚠️ 当前没有ETF数据")
+            else:
+                lines = ["🏦 BTC现货ETF历史", ""]
+                lines += [f"{x['date']}：{fmt_usd(x['flow'], True)}" for x in rows[:10]]
+                send_telegram("\n".join(lines))
+        except Exception as e:
+            send_telegram(f"❌ ETF查询失败：{str(e)}")
     elif c == "/week":
         if not snap:
             snap = collect_snapshot(state)
@@ -694,13 +700,16 @@ def run():
     try:
         updates = get_updates(state)
         for u in updates:
-            state["update_offset"] = max(int(state.get("update_offset", 0)), int(u["update_id"]) + 1)
             msg = u.get("message") or {}
             chat = msg.get("chat", {})
             text = msg.get("text", "")
             if not text or not is_allowed_chat(chat.get("id")):
                 continue
             history = handle_command(text, state, history)
+            state["update_offset"] = max(
+                int(state.get("update_offset", 0)),
+                int(u["update_id"]) + 1
+            )
     except Exception as e:
         print("UPDATE ERROR:", e)
 
