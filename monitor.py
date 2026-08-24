@@ -285,14 +285,13 @@ def get_mvrv_z(state):
 
             print(
                 "BGEOMETRICS RAW:",
-                json.dumps(data, ensure_ascii=False)
+                json.dumps(data, ensure_ascii=False),
+                flush=True
             )
 
             api_count(state, "BGeometrics")
 
-            
-
-            # 兼容不同返回结构
+            # API可能直接返回对象，也可能返回数组
             if isinstance(data, list):
                 rows = data
             elif isinstance(data, dict):
@@ -307,49 +306,77 @@ def get_mvrv_z(state):
 
             item = rows[-1]
 
-            # 兼容可能的字段名称
-            value = None
-            for key in (
-                "value",
-                "mvrv_z",
+            if not isinstance(item, dict):
+                raise RuntimeError("API返回的数据格式异常")
+
+            # BGeometrics日期字段
+            date_value = (
+                item.get("d")
+                or item.get("date")
+                or item.get("timestamp")
+                or ""
+            )
+
+            # 优先寻找明确的MVRV-Z字段
+            possible_keys = [
                 "mvrvZ",
+                "mvrv_z",
+                "mvrv-zscore",
+                "mvrv_zscore",
+                "mvrvZscore",
                 "zscore",
                 "z_score",
-                "zscore_value"
-            ):
-                if isinstance(item, dict) and item.get(key) is not None:
-                    value = item[key]
+                "value",
+            ]
+
+            value = None
+
+            for key in possible_keys:
+                if item.get(key) is not None:
+                    value = item.get(key)
                     break
 
             if value is None:
+                # 如果字段名不同，尝试寻找唯一的数字字段
+                numeric_candidates = []
+
+                for key, val in item.items():
+                    if key in ("unixTs", "timestamp"):
+                        continue
+
+                    try:
+                        numeric_value = float(val)
+
+                        # MVRV-Z通常在较小的数值范围内
+                        if -20 <= numeric_value <= 20:
+                            numeric_candidates.append(
+                                (key, numeric_value)
+                            )
+                    except (TypeError, ValueError):
+                        continue
+
+                if len(numeric_candidates) == 1:
+                    value = numeric_candidates[0][1]
+
+            if value is None:
                 raise RuntimeError(
-                    "API返回成功，但没有找到MVRV-Z数值"
+                    "API返回成功，但没有找到MVRV-Z数值；"
+                    f"字段={list(item.keys())}"
                 )
 
-            result = {
+            return {
                 "available": True,
-                "value": float(value)
+                "value": float(value),
+                "date": str(date_value)
             }
 
-            # 尝试读取日期
-            if isinstance(item, dict):
-                result["date"] = (
-                    item.get("date")
-                    or item.get("d")
-                    or item.get("timestamp")
-                    or ""
-                )
-
-            return result
-
         except Exception as e:
-            errors.append(str(e)[:150])
+            errors.append(str(e)[:300])
 
     return {
         "available": False,
-        "reason": "；".join(errors)[:300]
+        "reason": "；".join(errors)[:500]
     }
-
 
 def collect_snapshot(state):
     btc = get_btc(state)
