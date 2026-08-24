@@ -282,7 +282,15 @@ def get_mvrv_z(state):
             )
 
             data = get_json(url, timeout=20)
+
+            print(
+                "BGEOMETRICS RAW:",
+                json.dumps(data, ensure_ascii=False)
+            )
+
             api_count(state, "BGeometrics")
+
+            
 
             # 兼容不同返回结构
             if isinstance(data, list):
