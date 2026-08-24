@@ -257,29 +257,90 @@ def get_coinbase_premium(state, btc_price):
 
 
 def get_mvrv_z(state):
-    # Optional source. Do not fabricate a value when the source/key is unavailable.
+    """Fetch the latest daily MVRV Z-Score from BGeometrics."""
     if not BGEOMETRICS_API_KEY:
-        return {"available": False, "reason": "未配置 BGEOMETRICS_API_KEY"}
+        return {
+            "available": False,
+            "reason": "未配置 BGEOMETRICS_API_KEY"
+        }
+
     urls = [
         "https://bitcoin-data.com/v1/mvrv-zscore/last",
-        "https://api.bgeometrics.com/v1/mvrv-zscore/last",
+        "https://bitcoin-data.com/v1/mvrv-zscore?limit=1",
     ]
-    for url in urls:
+
+    errors = []
+
+    for base_url in urls:
         try:
-            headers = {"Authorization": f"Bearer {BGEOMETRICS_API_KEY}"}
-            data = get_json(url, headers)
+            separator = "&" if "?" in base_url else "?"
+            url = (
+                base_url
+                + separator
+                + "token="
+                + urllib.parse.quote(BGEOMETRICS_API_KEY)
+            )
+
+            data = get_json(url, timeout=20)
             api_count(state, "BGeometrics")
-            if isinstance(data, dict):
-                for k in ("value", "mvrv_z", "mvrvZ", "zscore"):
-                    if data.get(k) is not None:
-                        return {"available": True, "value": float(data[k])}
-                if isinstance(data.get("data"), dict):
-                    for k in ("value", "mvrv_z", "mvrvZ", "zscore"):
-                        if data["data"].get(k) is not None:
-                            return {"available": True, "value": float(data["data"][k])}
-        except Exception:
-            continue
-    return {"available": False, "reason": "MVRV-Z接口暂未返回可确认数据"}
+
+            # 兼容不同返回结构
+            if isinstance(data, list):
+                rows = data
+            elif isinstance(data, dict):
+                rows = data.get("data", data)
+                if isinstance(rows, dict):
+                    rows = [rows]
+            else:
+                rows = []
+
+            if not rows:
+                raise RuntimeError("API返回为空")
+
+            item = rows[-1]
+
+            # 兼容可能的字段名称
+            value = None
+            for key in (
+                "value",
+                "mvrv_z",
+                "mvrvZ",
+                "zscore",
+                "z_score",
+                "zscore_value"
+            ):
+                if isinstance(item, dict) and item.get(key) is not None:
+                    value = item[key]
+                    break
+
+            if value is None:
+                raise RuntimeError(
+                    "API返回成功，但没有找到MVRV-Z数值"
+                )
+
+            result = {
+                "available": True,
+                "value": float(value)
+            }
+
+            # 尝试读取日期
+            if isinstance(item, dict):
+                result["date"] = (
+                    item.get("date")
+                    or item.get("d")
+                    or item.get("timestamp")
+                    or ""
+                )
+
+            return result
+
+        except Exception as e:
+            errors.append(str(e)[:150])
+
+    return {
+        "available": False,
+        "reason": "；".join(errors)[:300]
+    }
 
 
 def collect_snapshot(state):
