@@ -3,19 +3,20 @@ name: BTC Telegram Monitor
 on:
   workflow_dispatch:
   schedule:
-    # 每5分钟运行一次，用于检查Telegram指令
-    - cron: "*/5 * * * *"
+    # 每6小时启动一次，单次持续运行约5小时50分钟
+    - cron: "0 */6 * * *"
 
 permissions:
   contents: write
 
 concurrency:
   group: btc-telegram-monitor
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   monitor:
     runs-on: ubuntu-latest
+    timeout-minutes: 350
 
     steps:
       - name: Checkout repository
@@ -23,19 +24,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run BTC monitor
+      - name: Run BTC monitor continuously
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           SOSOVALUE_API_KEY: ${{ secrets.SOSOVALUE_API_KEY }}
           COINGLASS_API_KEY: ${{ secrets.COINGLASS_API_KEY }}
           BGEOMETRICS_API_KEY: ${{ secrets.BGEOMETRICS_API_KEY }}
-        run: python3 monitor.py
+        run: |
+          end_time=$(( $(date +%s) + 20400 ))
+
+          while [ $(date +%s) -lt $end_time ]; do
+            echo "===== BTC monitor cycle $(date '+%Y-%m-%d %H:%M:%S UTC') ====="
+            python3 monitor.py || true
+            sleep 15
+          done
 
       - name: Save state and history
+        if: always()
         run: |
           git config user.name "btc-telegram-monitor[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bot_state.json market_history.json
           git diff --cached --quiet || git commit -m "chore: update market monitor state"
-          git push
+          git push || true
