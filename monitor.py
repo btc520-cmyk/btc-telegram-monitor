@@ -784,7 +784,7 @@ def daily_due(state):
     n = now_cn()
     # Daily push at 10:00-10:04 Beijing time, with Actions running every 5 minutes.
     today = n.strftime("%Y-%m-%d")
-    return n.hour == 10 and n.minute < 5 and state.get("last_daily_push") != today
+    return n.hour == 11 and n.minute < 5 and state.get("last_daily_push") != today
 
 
 def run():
