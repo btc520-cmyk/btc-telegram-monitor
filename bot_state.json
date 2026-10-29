@@ -1,15 +1,15 @@
 {
   "update_offset": 506247781,
-  "last_collection": "2026-10-28T11:00:10+08:00",
-  "last_daily_push": "2026-10-28",
+  "last_collection": "2026-10-29T11:00:06+08:00",
+  "last_daily_push": "2026-10-29",
   "api_calls": {
-    "Binance": 26,
-    "Alternative.me": 26,
-    "SoSoValue": 26,
-    "DefiLlama": 78,
-    "Coinbase": 26,
-    "CoinGlass": 44,
-    "BGeometrics": 21
+    "Binance": 27,
+    "Alternative.me": 27,
+    "SoSoValue": 27,
+    "DefiLlama": 81,
+    "Coinbase": 27,
+    "CoinGlass": 46,
+    "BGeometrics": 22
   },
-  "runs": 153698
+  "runs": 154376
 }
